@@ -1,18 +1,13 @@
-#include "envoy/extensions/common/aws/v3/credential_provider.pb.h"
-
 #include "source/extensions/common/aws/credential_providers/instance_profile_credentials_provider.h"
 
 #include "test/extensions/common/aws/mocks.h"
-#include "test/mocks/server/factory_context.h"
-#include "test/test_common/environment.h"
+#include "test/mocks/server/server_factory_context.h"
 #include "test/test_common/test_runtime.h"
 
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 using testing::_;
 using testing::Eq;
-using testing::InSequence;
 using testing::NiceMock;
 using testing::Return;
 namespace Envoy {
@@ -64,19 +59,17 @@ public:
                      std::chrono::seconds initialization_timer = std::chrono::seconds(2)) {
     ON_CALL(context_, clusterManager()).WillByDefault(ReturnRef(cluster_manager_));
     mock_manager_ = std::make_shared<MockAwsClusterManager>();
-    base_manager_ = std::dynamic_pointer_cast<AwsClusterManager>(mock_manager_);
-
-    manager_optref_.emplace(base_manager_);
     EXPECT_CALL(*mock_manager_, getUriFromClusterName(_))
         .WillRepeatedly(Return("169.254.170.2:80/path/to/doc"));
 
     provider_ = std::make_shared<InstanceProfileCredentialsProvider>(
-        *api_, context_, manager_optref_,
+        *api_, context_, mock_manager_,
         [this](Upstream::ClusterManager&, absl::string_view) {
           metadata_fetcher_.reset(raw_metadata_fetcher_);
           return std::move(metadata_fetcher_);
         },
         refresh_state, initialization_timer, "credentials_provider_cluster");
+    EXPECT_EQ(provider_->providerName(), "InstanceProfileCredentialsProvider");
   }
 
   void expectSessionToken(const uint64_t status_code, const std::string&& token) {
@@ -240,9 +233,7 @@ public:
   Upstream::ClusterUpdateCallbacks* cluster_update_callbacks_{};
   Event::MockTimer* timer_{};
   std::chrono::milliseconds expected_duration_;
-  OptRef<std::shared_ptr<AwsClusterManager>> manager_optref_;
   std::shared_ptr<MockAwsClusterManager> mock_manager_;
-  std::shared_ptr<AwsClusterManager> base_manager_;
 };
 
 TEST_F(InstanceProfileCredentialsProviderTest, FailedCredentialListingIMDSv1) {
@@ -782,6 +773,31 @@ TEST_F(InstanceProfileCredentialsProviderTest,
   EXPECT_FALSE(credentials.accessKeyId().has_value());
   EXPECT_FALSE(credentials.secretAccessKey().has_value());
   EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(InstanceProfileCredentialsProviderTest, TestCancel) {
+  // Setup timer.
+  timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
+
+  expectDocument(200, std::move(R"EOF(
+not json
+)EOF"));
+
+  setupProvider();
+  timer_->enableTimer(std::chrono::milliseconds(1), nullptr);
+
+  // Kick off a refresh
+  auto provider_friend = MetadataCredentialsProviderBaseFriend(provider_);
+  auto mock_fetcher = std::make_unique<MockMetadataFetcher>();
+
+  EXPECT_CALL(*mock_fetcher, cancel);
+  EXPECT_CALL(*mock_fetcher, fetch(_, _, _));
+  // Ensure we have a metadata fetcher configured, so we expect this to receive a cancel
+  provider_friend.setMetadataFetcher(std::move(mock_fetcher));
+
+  provider_friend.onClusterAddOrUpdate();
+  timer_->invokeCallback();
+  delete (raw_metadata_fetcher_);
 }
 
 } // namespace Aws

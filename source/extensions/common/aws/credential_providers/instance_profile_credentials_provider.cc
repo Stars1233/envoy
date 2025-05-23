@@ -1,5 +1,11 @@
 #include "source/extensions/common/aws/credential_providers/instance_profile_credentials_provider.h"
 
+#include "envoy/server/factory_context.h"
+
+#include "source/common/http/message_impl.h"
+#include "source/common/json/json_loader.h"
+#include "source/extensions/common/aws/utility.h"
+
 namespace Envoy {
 namespace Extensions {
 namespace Common {
@@ -7,16 +13,12 @@ namespace Aws {
 
 InstanceProfileCredentialsProvider::InstanceProfileCredentialsProvider(
     Api::Api& api, Server::Configuration::ServerFactoryContext& context,
-    AwsClusterManagerOptRef aws_cluster_manager, CreateMetadataFetcherCb create_metadata_fetcher_cb,
+    AwsClusterManagerPtr aws_cluster_manager, CreateMetadataFetcherCb create_metadata_fetcher_cb,
     MetadataFetcher::MetadataReceiver::RefreshState refresh_state,
     std::chrono::seconds initialization_timer, absl::string_view cluster_name)
     : MetadataCredentialsProviderBase(api, context, aws_cluster_manager, cluster_name,
                                       create_metadata_fetcher_cb, refresh_state,
                                       initialization_timer) {}
-
-bool InstanceProfileCredentialsProvider::needsRefresh() {
-  return api_.timeSource().systemTime() - last_updated_ > REFRESH_INTERVAL;
-}
 
 void InstanceProfileCredentialsProvider::refresh() {
 
@@ -32,10 +34,6 @@ void InstanceProfileCredentialsProvider::refresh() {
   token_req_message.headers().setCopy(Http::LowerCaseString(EC2_IMDS_TOKEN_TTL_HEADER),
                                       EC2_IMDS_TOKEN_TTL_DEFAULT_VALUE);
 
-  // Stop any existing timer.
-  if (cache_duration_timer_ && cache_duration_timer_->enabled()) {
-    cache_duration_timer_->disableTimer();
-  }
   // Using Http async client to fetch the AWS credentials where we first get the token.
   if (!metadata_fetcher_) {
     metadata_fetcher_ = create_metadata_fetcher_cb_(context_.clusterManager(), clusterName());
