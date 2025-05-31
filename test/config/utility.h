@@ -207,7 +207,8 @@ public:
                                            bool multiple_addresses = false);
 
   // A string for a tls inspector listener filter which can be used with addListenerFilter()
-  static std::string tlsInspectorFilter(bool enable_ja3_fingerprinting = false);
+  static std::string tlsInspectorFilter(bool enable_ja3_fingerprinting = false,
+                                        bool enable_ja4_fingerprinting = false);
 
   // A string for the test inspector filter.
   static std::string testInspectorFilter();
@@ -327,7 +328,7 @@ public:
   void disableDelayClose();
 
   // Set the max_requests_per_connection for downstream through the HttpConnectionManager.
-  void setDownstreamMaxRequestsPerConnection(uint64_t max_requests_per_connection);
+  void setDownstreamMaxRequestsPerConnection(uint32_t max_requests_per_connection);
 
   envoy::config::route::v3::VirtualHost createVirtualHost(const char* host, const char* route = "/",
                                                           const char* cluster = "cluster_0");

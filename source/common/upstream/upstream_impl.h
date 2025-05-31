@@ -126,7 +126,6 @@ class DetectorHostMonitorNullImpl : public Outlier::DetectorHostMonitor {
 public:
   // Upstream::Outlier::DetectorHostMonitor
   uint32_t numEjections() override { return 0; }
-  void putHttpResponseCode(uint64_t) override {}
   void putResult(Outlier::Result, absl::optional<uint64_t>) override {}
   void putResponseTime(std::chrono::milliseconds) override {}
   const absl::optional<MonotonicTime>& lastEjectionTime() override { return time_; }
@@ -933,7 +932,7 @@ public:
     return *upstream_config_;
   }
   bool maintenanceMode() const override;
-  uint64_t maxRequestsPerConnection() const override { return max_requests_per_connection_; }
+  uint32_t maxRequestsPerConnection() const override { return max_requests_per_connection_; }
   uint32_t maxResponseHeadersCount() const override { return max_response_headers_count_; }
   absl::optional<uint16_t> maxResponseHeadersKb() const override {
     return max_response_headers_kb_;
@@ -1111,7 +1110,7 @@ private:
       extension_protocol_options_;
   const std::shared_ptr<const HttpProtocolOptionsConfigImpl> http_protocol_options_;
   const std::shared_ptr<const TcpProtocolOptionsConfigImpl> tcp_protocol_options_;
-  const uint64_t max_requests_per_connection_;
+  const uint32_t max_requests_per_connection_;
   const std::chrono::milliseconds connect_timeout_;
   OptionalTimeouts optional_timeouts_;
   const float per_upstream_preconnect_ratio_;
