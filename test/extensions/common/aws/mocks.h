@@ -2,7 +2,6 @@
 
 #include "envoy/http/message.h"
 
-#include "source/common/http/message_impl.h"
 #include "source/extensions/common/aws/aws_cluster_manager.h"
 #include "source/extensions/common/aws/credential_provider_chains.h"
 #include "source/extensions/common/aws/credentials_provider.h"
@@ -108,40 +107,19 @@ public:
 
   MOCK_METHOD(
       CredentialsProviderSharedPtr, createWebIdentityCredentialsProvider,
-      (Server::Configuration::ServerFactoryContext&, AwsClusterManagerOptRef, absl::string_view,
+      (Server::Configuration::ServerFactoryContext&, AwsClusterManagerPtr, absl::string_view,
        const envoy::extensions::common::aws::v3::AssumeRoleWithWebIdentityCredentialProvider&));
 
   MOCK_METHOD(CredentialsProviderSharedPtr, createContainerCredentialsProvider,
-              (Api::Api&, Server::Configuration::ServerFactoryContext&, AwsClusterManagerOptRef,
+              (Server::Configuration::ServerFactoryContext&, AwsClusterManagerPtr,
                CreateMetadataFetcherCb, absl::string_view, absl::string_view,
                MetadataFetcher::MetadataReceiver::RefreshState, std::chrono::seconds,
                absl::string_view));
 
   MOCK_METHOD(CredentialsProviderSharedPtr, createInstanceProfileCredentialsProvider,
-              (Api::Api&, Server::Configuration::ServerFactoryContext&, AwsClusterManagerOptRef,
+              (Server::Configuration::ServerFactoryContext&, AwsClusterManagerPtr,
                CreateMetadataFetcherCb, MetadataFetcher::MetadataReceiver::RefreshState,
                std::chrono::seconds, absl::string_view));
-};
-
-class MockCustomCredentialsProviderChainFactories : public CustomCredentialsProviderChainFactories {
-public:
-  MOCK_METHOD(
-      CredentialsProviderSharedPtr, mockCreateCredentialsFileCredentialsProvider,
-      (Server::Configuration::ServerFactoryContext&,
-       (const envoy::extensions::common::aws::v3::CredentialsFileCredentialProvider& config)),
-      (const));
-
-  CredentialsProviderSharedPtr createCredentialsFileCredentialsProvider(
-      Server::Configuration::ServerFactoryContext& context,
-      const envoy::extensions::common::aws::v3::CredentialsFileCredentialProvider& config)
-      const override {
-    return mockCreateCredentialsFileCredentialsProvider(context, config);
-  }
-
-  MOCK_METHOD(
-      CredentialsProviderSharedPtr, createWebIdentityCredentialsProvider,
-      (Server::Configuration::ServerFactoryContext&, AwsClusterManagerOptRef, absl::string_view,
-       const envoy::extensions::common::aws::v3::AssumeRoleWithWebIdentityCredentialProvider&));
 };
 
 class MockSigV4AKeyDerivation : public SigV4AKeyDerivationBase {
@@ -158,8 +136,11 @@ public:
       : provider_(provider) {}
 
   void onClusterAddOrUpdate() { return provider_->onClusterAddOrUpdate(); }
+  void setMetadataFetcher(MetadataFetcherPtr fetcher) {
+    provider_->metadata_fetcher_ = std::move(fetcher);
+  }
+
   std::shared_ptr<MetadataCredentialsProviderBase> provider_;
-  bool needsRefresh() { return provider_->needsRefresh(); };
 };
 
 } // namespace Aws
